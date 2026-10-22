@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Môj webový obchod</title>
+<style>
+body{font-family:Arial,sans-serif;max-width:950px;margin:30px auto;padding:18px;background:#f4f6f9;color:#333}
+h1{margin-top:0}.layout{display:grid;grid-template-columns:1fr 1fr;gap:20px}.card{background:#fff;padding:20px;border-radius:8px;box-shadow:0 2px 5px #0001}
+.product{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid #eee}
+button{border:0;border-radius:5px;padding:8px 12px;background:#4f46e5;color:#fff;cursor:pointer}button:disabled{opacity:.5;cursor:not-allowed}
+.green{background:#16a34a}.pink{background:#db2777}.buttons{display:flex;gap:8px;flex-wrap:wrap;margin:15px 0}.notice{padding:10px;background:#eef2ff;border-radius:5px}
+@media(max-width:650px){.layout{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<h1>=== OBCHOD ===</h1>
+<p>Školský e-shop – ukážková verzia.</p>
+<div class="layout">
+<section class="card"><h2>Ponuka produktov</h2><div id="products">Načítavam produkty...</div><p><a href="/admin">Prejsť do admin panelu</a></p></section>
+<section class="card"><h2>Košík</h2><ul id="cart"></ul><hr>
+<p>Medzisúčet: <strong><span id="subtotal">0.00</span> €</strong></p>
+<p>Zľava: <strong><span id="discount">0.00</span> €</strong></p>
+<h3>Celkom: <span id="total">0.00</span> €</h3>
+<div class="buttons"><button id="club" type="button">💳 Clubcard −10 %</button><button id="coupon" class="pink" type="button">🎟️ Kupón −20 %</button></div>
+<button id="checkout" class="green" type="button">Zaplatiť nákup</button><p id="message" class="notice" role="status" hidden></p>
+</section></div>
+<script>
+const CART_KEY="eshop_cart_v1";
+let products=[], cart=loadCart(), club=false, coupon=false;
+function loadCart(){try{return JSON.parse(localStorage.getItem(CART_KEY)||"[]")}catch{return []}}
+function saveCart(){localStorage.setItem(CART_KEY,JSON.stringify(cart))}
+function msg(s){const el=document.getElementById("message");el.textContent=s;el.hidden=false}
+async function api(url,options={}) {
+  const res=await fetch(url,{credentials:"same-origin",...options,headers:{"Content-Type":"application/json",...(options.headers||{})}});
+  let data={};try{data=await res.json()}catch{}
+  if(!res.ok)throw new Error(data.detail||"Požiadavka zlyhala.");
+  return data;
+}
+function money(n){return Number(n).toFixed(2)}
+function render(){
+ const box=document.getElementById("products");box.replaceChildren();
+ products.forEach(p=>{
+  const row=document.createElement("div");row.className="product";
+  const label=document.createElement("span");label.textContent=`${p.name} — ${money(p.price)} € (Sklad: ${p.stock})`;
+  const b=document.createElement("button");b.textContent=p.stock>0?"Pridať":"Vypredané";b.disabled=p.stock<=0;
+  b.addEventListener("click",()=>{const found=cart.find(x=>x.id===p.id);if(found)found.quantity++;else cart.push({id:p.id,quantity:1});saveCart();renderCart()});
+  row.append(label,b);box.append(row);
+ });
+ renderCart();
+}
+function renderCart(){
+ const list=document.getElementById("cart");list.replaceChildren();let subtotal=0;
+ cart=cart.filter(i=>products.some(p=>p.id===i.id)&&Number.isInteger(i.quantity)&&i.quantity>0);
+ cart.forEach((item,index)=>{
+  const p=products.find(x=>x.id===item.id);subtotal+=p.price*item.quantity;
+  const li=document.createElement("li");li.append(document.createTextNode(`${p.name} × ${item.quantity} — ${money(p.price*item.quantity)} € `));
+  const remove=document.createElement("button");remove.textContent="Odstrániť";remove.addEventListener("click",()=>{cart.splice(index,1);saveCart();renderCart()});li.append(remove);list.append(li);
+ });
+ let total=subtotal;if(club)total*=.9;if(coupon)total*=.8;
+ document.getElementById("subtotal").textContent=money(subtotal);document.getElementById("total").textContent=money(total);document.getElementById("discount").textContent=money(subtotal-total);
+ document.getElementById("club").disabled=club||subtotal<=0;document.getElementById("coupon").disabled=coupon||subtotal<=0;
+ saveCart();
+}
+async function refresh(){try{products=await api("/api/products");render()}catch(e){document.getElementById("products").textContent="Produkty sa nepodarilo načítať: "+e.message}}
+document.getElementById("club").addEventListener("click",()=>{club=true;renderCart()});
+document.getElementById("coupon").addEventListener("click",()=>{coupon=true;renderCart()});
+document.getElementById("checkout").addEventListener("click",async()=>{
+ if(!cart.length)return msg("Košík je prázdny.");
+ try{
+  const result=await api("/api/checkout",{method:"POST",body:JSON.stringify({items:cart,clubcard:club,coupon})});
+  cart=[];club=false;coupon=false;saveCart();msg(`Nákup č. ${result.order_id} bol uložený. Suma: ${money(result.total)} €. Ide o školskú simuláciu, nie skutočnú platbu.`);
+  await refresh();
+ }catch(e){msg(e.message);await refresh()}
+});
+refresh();
+</script>
+</body></html>
