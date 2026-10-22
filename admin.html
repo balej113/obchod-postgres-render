@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="sk"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin panel</title><style>
+body{font-family:Arial,sans-serif;max-width:750px;margin:35px auto;padding:18px;background:#f4f6f9;color:#333}.card{background:white;padding:22px;border-radius:8px;box-shadow:0 2px 5px #0001}
+input{padding:8px;border:1px solid #bbb;border-radius:4px}button{background:#4f46e5;color:white;border:0;padding:8px 12px;border-radius:4px;cursor:pointer}.hidden{display:none}.row{display:flex;gap:12px;justify-content:space-between;align-items:center;border-bottom:1px solid #eee;padding:12px 0}.notice{padding:10px;background:#eef2ff;border-radius:5px}
+@media(max-width:500px){.row{align-items:flex-start;flex-direction:column}}
+</style></head><body>
+<section id="login" class="card"><h1>Admin prihlásenie</h1><form id="loginForm"><label for="pin">Admin PIN:</label> <input id="pin" type="password" required maxlength="100" autocomplete="current-password"><button>Prihlásiť</button></form><p id="loginMessage" class="notice" role="status" hidden></p><p><a href="/">← Späť do obchodu</a></p></section>
+<section id="panel" class="card hidden"><h1>Správa skladu</h1><p id="status" class="notice" role="status" hidden></p><div id="stock"></div><button id="logout">Odhlásiť</button> <a href="/">Späť do obchodu</a></section>
+<script>
+async function api(url,options={}){const r=await fetch(url,{credentials:"same-origin",...options,headers:{"Content-Type":"application/json",...(options.headers||{})}});let d={};try{d=await r.json()}catch{}if(!r.ok)throw new Error(d.detail||"Požiadavka zlyhala.");return d}
+function show(id,text){const e=document.getElementById(id);e.textContent=text;e.hidden=false}
+async function loadStock(){
+ const products=await api("/api/products"),box=document.getElementById("stock");box.replaceChildren();
+ products.forEach(p=>{const row=document.createElement("div");row.className="row";const label=document.createElement("span");label.textContent=`${p.name} (${p.price.toFixed(2)} €) — sklad: ${p.stock} ks`;
+ const form=document.createElement("form"),input=document.createElement("input");input.type="number";input.min="1";input.max="10000";input.value="5";input.required=true;input.setAttribute("aria-label","Počet kusov na doplnenie");
+ const button=document.createElement("button");button.textContent="Doplniť sklad";form.append(input,button);
+ form.addEventListener("submit",async e=>{e.preventDefault();try{const amount=Number(input.value);if(!Number.isInteger(amount)||amount<1||amount>10000)throw new Error("Zadaj celé číslo od 1 do 10000.");await api(`/api/admin/products/${p.id}/stock`,{method:"POST",body:JSON.stringify({amount})});show("status","Sklad bol aktualizovaný.");await loadStock()}catch(err){show("status",err.message)}});
+ row.append(label,form);box.append(row)});
+}
+document.getElementById("loginForm").addEventListener("submit",async e=>{e.preventDefault();try{await api("/api/admin/login",{method:"POST",body:JSON.stringify({pin:document.getElementById("pin").value})});document.getElementById("login").classList.add("hidden");document.getElementById("panel").classList.remove("hidden");await loadStock()}catch(err){show("loginMessage",err.message)}});
+document.getElementById("logout").addEventListener("click",async()=>{try{await api("/api/admin/logout",{method:"POST"});location.reload()}catch(e){show("status",e.message)}});
+api("/api/admin/status").then(s=>{if(s.is_admin){document.getElementById("login").classList.add("hidden");document.getElementById("panel").classList.remove("hidden");loadStock().catch(e=>show("status",e.message))}}).catch(()=>{});
+</script></body></html>
