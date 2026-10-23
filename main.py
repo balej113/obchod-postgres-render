@@ -45,7 +45,7 @@ def db_connect():
 
 def init_db():
     defaults = [
-        (6, "Jablko", Decimal("0.50"), 10),  # Zmenené ID na 6, aby sa uložilo nanovo so skladom 10
+        (1, "Jablko", Decimal("0.50"), 10),
         (2, "Banán", Decimal("0.45"), 10),
         (3, "Mrkva", Decimal("0.30"), 10),
         (4, "Zemiak", Decimal("0.25"), 15),
@@ -133,7 +133,6 @@ def get_products(sort: Optional[str] = Query(None)):
     with db_connect() as conn:
         query = "SELECT id, name, price, stock FROM products"
         
-        # Logika pre triedenie produktov
         if sort == "name":
             query += " ORDER BY name ASC"
         elif sort == "price_asc":
