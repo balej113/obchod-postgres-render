@@ -5,7 +5,7 @@ from typing import Optional
 
 import psycopg
 from psycopg.rows import dict_row
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, Query
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -111,7 +111,6 @@ def require_admin(request: Request):
 
 
 def check_origin(request: Request):
-    # Ochrana pred jednoduchými cross-site POST požiadavkami. API používaj cez tú istú doménu.
     origin = request.headers.get("origin")
     if origin:
         expected = str(request.base_url).rstrip("/")
@@ -130,18 +129,28 @@ def admin_page(request: Request):
 
 
 @app.get("/api/products")
-def get_products():
+def get_products(sort: Optional[str] = Query(None)):
     with db_connect() as conn:
-        rows = conn.execute(
-            "SELECT id, name, price, stock FROM products ORDER BY id"
-        ).fetchall()
+        query = "SELECT id, name, price, stock FROM products"
+        
+        # Logika pre triedenie produktov
+        if sort == "name":
+            query += " ORDER BY name ASC"
+        elif sort == "price_asc":
+            query += " ORDER BY price ASC"
+        elif sort == "price_desc":
+            query += " ORDER BY price DESC"
+        else:
+            query += " ORDER BY id"
+            
+        rows = conn.execute(query).fetchall()
+        
     return [{"id": r["id"], "name": r["name"], "price": float(r["price"]), "stock": r["stock"]} for r in rows]
 
 
 @app.post("/api/admin/login")
 def admin_login(body: LoginBody, request: Request):
     check_origin(request)
-    # PIN sa porovnáva na serveri; nikdy ho neposielame do HTML/JavaScriptu.
     if not secrets.compare_digest(body.pin, ADMIN_PIN):
         raise HTTPException(status_code=401, detail="Nesprávny PIN.")
     request.session.clear()
@@ -182,7 +191,6 @@ def checkout(body: CheckoutBody, request: Request):
     if not body.items or len(body.items) > 50:
         raise HTTPException(status_code=400, detail="Košík je prázdny alebo príliš veľký.")
 
-    # Normalizácia ID a množstva; klientom dodané ceny sa nikdy nepoužívajú.
     quantities = {}
     for item in body.items:
         if not isinstance(item, dict):
@@ -201,7 +209,6 @@ def checkout(body: CheckoutBody, request: Request):
     with db_connect() as conn:
         products = []
         subtotal = Decimal("0.00")
-        # Zámok riadkov a transakcia zabránia predaju väčšieho množstva, než je sklad.
         for product_id in sorted(quantities):
             row = conn.execute(
                 "SELECT id, name, price, stock FROM products WHERE id = %s FOR UPDATE",
@@ -247,7 +254,6 @@ def health():
     return {"ok": True}
 
 
-# Basic security headers for all responses.
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
     response = await call_next(request)
