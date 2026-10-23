@@ -45,7 +45,7 @@ def db_connect():
 
 def init_db():
     defaults = [
-        (1, "Jablko", Decimal("0.50"), 10),
+        (6, "Jablko", Decimal("0.50"), 10),  # Zmenené ID na 6, aby sa uložilo nanovo so skladom 10
         (2, "Banán", Decimal("0.45"), 10),
         (3, "Mrkva", Decimal("0.30"), 10),
         (4, "Zemiak", Decimal("0.25"), 15),
@@ -81,9 +81,7 @@ def init_db():
             conn.execute(
                 """INSERT INTO products (id, name, price, stock)
                    VALUES (%s, %s, %s, %s)
-                   ON CONFLICT (id) DO UPDATE SET 
-                       stock = EXCLUDED.stock, 
-                       price = EXCLUDED.price""",
+                   ON CONFLICT (id) DO NOTHING""",
                 product,
             )
 
@@ -198,4 +196,69 @@ def checkout(body: CheckoutBody, request: Request):
         if not isinstance(item, dict):
             raise HTTPException(status_code=400, detail="Neplatná položka košíka.")
         try:
-            product_id = int(item.get("
+            product_id = int(item.get("id"))
+            qty = int(item.get("quantity", 1))
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="Neplatné ID alebo množstvo.")
+        if qty < 1 or qty > 20:
+            raise HTTPException(status_code=400, detail="Množstvo musí byť od 1 do 20.")
+        quantities[product_id] = quantities.get(product_id, 0) + qty
+    if len(quantities) > 20:
+        raise HTTPException(status_code=400, detail="Príliš veľa rôznych produktov.")
+
+    with db_connect() as conn:
+        products = []
+        subtotal = Decimal("0.00")
+        for product_id in sorted(quantities):
+            row = conn.execute(
+                "SELECT id, name, price, stock FROM products WHERE id = %s FOR UPDATE",
+                (product_id,),
+            ).fetchone()
+            if not row:
+                raise HTTPException(status_code=400, detail="Košík obsahuje neznámy produkt.")
+            qty = quantities[product_id]
+            if row["stock"] < qty:
+                raise HTTPException(status_code=409, detail=f"Nedostatok na sklade: {row['name']}.")
+            subtotal += row["price"] * qty
+            products.append((row, qty))
+
+        total = subtotal
+        if body.clubcard:
+            total *= Decimal("0.90")
+        if body.coupon:
+            total *= Decimal("0.80")
+        total = total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+        order = conn.execute(
+            "INSERT INTO orders (total) VALUES (%s) RETURNING id", (total,)
+        ).fetchone()
+        order_id = order["id"]
+        for row, qty in products:
+            conn.execute(
+                "UPDATE products SET stock = stock - %s WHERE id = %s",
+                (qty, row["id"]),
+            )
+            conn.execute(
+                """INSERT INTO order_items
+                   (order_id, product_id, product_name, unit_price, quantity)
+                   VALUES (%s, %s, %s, %s, %s)""",
+                (order_id, row["id"], row["name"], row["price"], qty),
+            )
+    return {"success": True, "order_id": order_id, "total": float(total)}
+
+
+@app.get("/health")
+def health():
+    with db_connect() as conn:
+        conn.execute("SELECT 1")
+    return {"ok": True}
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+    return response
