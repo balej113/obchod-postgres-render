@@ -9,6 +9,8 @@ h1{margin-top:0}.layout{display:grid;grid-template-columns:1fr 1fr;gap:20px}.car
 .product{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid #eee}
 button{border:0;border-radius:5px;padding:8px 12px;background:#4f46e5;color:#fff;cursor:pointer}button:disabled{opacity:.5;cursor:not-allowed}
 .green{background:#16a34a}.pink{background:#db2777}.buttons{display:flex;gap:8px;flex-wrap:wrap;margin:15px 0}.notice{padding:10px;background:#eef2ff;border-radius:5px}
+.sort-box{margin-bottom:15px;}
+.sort-box select{padding:6px;border-radius:4px;border:1px solid #ccc;}
 @media(max-width:650px){.layout{grid-template-columns:1fr}}
 </style>
 </head>
@@ -16,7 +18,23 @@ button{border:0;border-radius:5px;padding:8px 12px;background:#4f46e5;color:#fff
 <h1>=== OBCHOD ===</h1>
 <p>Školský e-shop – ukážková verzia.</p>
 <div class="layout">
-<section class="card"><h2>Ponuka produktov</h2><div id="products">Načítavam produkty...</div><p><a href="/admin">Prejsť do admin panelu</a></p></section>
+<section class="card">
+    <h2>Ponuka produktov</h2>
+    
+    <!-- Výber pre zoradenie -->
+    <div class="sort-box">
+        <label for="sortSelect">Zoradiť: </label>
+        <select id="sortSelect" onchange="refresh()">
+            <option value="">Predvolené (ID)</option>
+            <option value="name">Podľa abecedy (A-Z)</option>
+            <option value="price_asc">Od najlacnejšieho</option>
+            <option value="price_desc">Od najdrahšieho</option>
+        </select>
+    </div>
+
+    <div id="products">Načítavam produkty...</div>
+    <p><a href="/admin">Prejsť do admin panelu</a></p>
+</section>
 <section class="card"><h2>Košík</h2><ul id="cart"></ul><hr>
 <p>Medzisúčet: <strong><span id="subtotal">0.00</span> €</strong></p>
 <p>Zľava: <strong><span id="discount">0.00</span> €</strong></p>
@@ -61,7 +79,19 @@ function renderCart(){
  document.getElementById("club").disabled=club||subtotal<=0;document.getElementById("coupon").disabled=coupon||subtotal<=0;
  saveCart();
 }
-async function refresh(){try{products=await api("/api/products");render()}catch(e){document.getElementById("products").textContent="Produkty sa nepodarilo načítať: "+e.message}}
+async function refresh(){
+ try{
+  const sortVal = document.getElementById("sortSelect").value;
+  let url = "/api/products";
+  if(sortVal) {
+      url += `?sort=${sortVal}`;
+  }
+  products=await api(url);
+  render();
+ }catch(e){
+  document.getElementById("products").textContent="Produkty sa nepodarilo načítať: "+e.message;
+ }
+}
 document.getElementById("club").addEventListener("click",()=>{club=true;renderCart()});
 document.getElementById("coupon").addEventListener("click",()=>{coupon=true;renderCart()});
 document.getElementById("checkout").addEventListener("click",async()=>{
@@ -74,4 +104,5 @@ document.getElementById("checkout").addEventListener("click",async()=>{
 });
 refresh();
 </script>
-</body></html>
+</body>
+</html>
