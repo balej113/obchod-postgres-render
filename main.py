@@ -78,9 +78,18 @@ def init_db():
             )
         """)
         
-        # Bezpečné odstránenie prípadných duplikátov alebo chybných položiek
+        # 1. Vymaže všetky položky s prehnaným skladom
         conn.execute("DELETE FROM products WHERE stock > 1000")
-        conn.execute("DELETE FROM products WHERE name = 'Jablko' AND id != 1")
+        
+        # 2. Univerzálne vymaže všetky duplicitné produkty (nechá len ten s najmenším ID pre daný názov)
+        conn.execute("""
+            DELETE FROM products 
+            WHERE id NOT IN (
+                SELECT MIN(id) 
+                FROM products 
+                GROUP BY name
+            )
+        """)
 
         for product in defaults:
             conn.execute(
