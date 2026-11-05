@@ -131,20 +131,36 @@ def admin_page(request: Request):
 @app.get("/api/products")
 def get_products(sort: Optional[str] = Query(None)):
     with db_connect() as conn:
+        # 1. SQL dopyt BEZ ORDER BY (databáza nič netriedi)
         query = "SELECT id, name, price, stock FROM products"
-        
-        if sort == "name":
-            query += " ORDER BY name ASC"
-        elif sort == "price_asc":
-            query += " ORDER BY price ASC"
-        elif sort == "price_desc":
-            query += " ORDER BY price DESC"
-        else:
-            query += " ORDER BY id"
-            
         rows = conn.execute(query).fetchall()
-        
-    return [{"id": r["id"], "name": r["name"], "price": float(r["price"]), "stock": r["stock"]} for r in rows]
+
+    # Prevod na zoznam slovníkov
+    products = [
+        {
+            "id": r["id"],
+            "name": r["name"],
+            "price": float(r["price"]),
+            "stock": r["stock"],
+        }
+        for r in rows
+    ]
+
+    # 2. Zoraďovanie prebieha tu na BACKENDE (v Pythone)
+    if sort == "name":
+        products = sorted(products, key=lambda p: p["name"].lower())
+    elif sort == "price_asc":
+        products = sorted(products, key=lambda p: p["price"])
+    elif sort == "price_desc":
+        products = sorted(products, key=lambda p: p["price"], reverse=True)
+    elif sort == "stock_asc":
+        products = sorted(products, key=lambda p: p["stock"])
+    elif sort == "stock_desc":
+        products = sorted(products, key=lambda p: p["stock"], reverse=True)
+    else:
+        products = sorted(products, key=lambda p: p["id"])
+
+    return products
 
 
 @app.post("/api/admin/login")
