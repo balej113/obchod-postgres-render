@@ -78,7 +78,7 @@ def init_db():
             )
         """)
         
-        # Automaticky vymaže chybné/duplicitné produkty s obrovským skladom (napr. to zlé jablko)
+        # Automaticky vymaže zlé jablko / položky s prehnaným skladom (> 1000 ks)
         conn.execute("DELETE FROM products WHERE stock > 1000")
 
         for product in defaults:
@@ -135,11 +135,10 @@ def admin_page(request: Request):
 @app.get("/api/products")
 def get_products(sort: Optional[str] = Query(None)):
     with db_connect() as conn:
-        # 1. SQL dopyt BEZ ORDER BY (databáza nič netriedi, splnená podmienka učiteľa)
+        # SQL dopyt BEZ ORDER BY (databáza netriedi, triedenie robí backend)
         query = "SELECT id, name, price, stock FROM products"
         rows = conn.execute(query).fetchall()
 
-    # Prevod na zoznam slovníkov
     products = [
         {
             "id": r["id"],
@@ -150,7 +149,7 @@ def get_products(sort: Optional[str] = Query(None)):
         for r in rows
     ]
 
-    # 2. Zoraďovanie prebieha tu na BACKENDE (v Pythone)
+    # Triedenie na backende v Pythone
     if sort == "name":
         products = sorted(products, key=lambda p: p["name"].lower())
     elif sort == "price_asc":
