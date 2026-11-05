@@ -78,8 +78,9 @@ def init_db():
             )
         """)
         
-        # Automaticky vymaže zlé jablko / položky s prehnaným skladom (> 1000 ks)
+        # Bezpečné odstránenie prípadných duplikátov alebo chybných položiek
         conn.execute("DELETE FROM products WHERE stock > 1000")
+        conn.execute("DELETE FROM products WHERE name = 'Jablko' AND id != 1")
 
         for product in defaults:
             conn.execute(
@@ -135,7 +136,7 @@ def admin_page(request: Request):
 @app.get("/api/products")
 def get_products(sort: Optional[str] = Query(None)):
     with db_connect() as conn:
-        # SQL dopyt BEZ ORDER BY (databáza netriedi, triedenie robí backend)
+        # SQL dopyt BEZ ORDER BY (databáza nič netriedi, triedenie robí backend)
         query = "SELECT id, name, price, stock FROM products"
         rows = conn.execute(query).fetchall()
 
@@ -149,7 +150,7 @@ def get_products(sort: Optional[str] = Query(None)):
         for r in rows
     ]
 
-    # Triedenie na backende v Pythone
+    # Zoraďovanie prebieha tu na backende v Pythone
     if sort == "name":
         products = sorted(products, key=lambda p: p["name"].lower())
     elif sort == "price_asc":
